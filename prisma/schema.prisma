@@ -1,0 +1,138 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// Per-shop forecasting thresholds and notification preferences.
+model ShopSettings {
+  shop             String    @id
+  lookbackDays     Int       @default(30) // sales history window used for velocity (max 60 without read_all_orders)
+  leadTimeDays     Int       @default(14) // supplier lead time: days between placing and receiving a PO
+  safetyStockDays  Int       @default(7) // buffer stock, expressed in days of sales
+  warningDays      Int       @default(14) // extra heads-up before the reorder point
+  coverageDays     Int       @default(30) // days of stock a reorder should cover
+  alertLevel       String    @default("REORDER") // lowest status that triggers an alert: OUT_OF_STOCK | CRITICAL | REORDER | WATCH
+  remindAfterDays  Int       @default(7) // re-alert an unchanged variant after this many days
+  emailEnabled     Boolean   @default(false)
+  alertEmail       String?
+  smsEnabled       Boolean   @default(false)
+  alertPhone       String?
+  currencyCode     String    @default("USD")
+  lastSyncedAt     DateTime?
+  lastOrderSyncAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// One row per order line item; the unit of truth for sales velocity.
+// Upserted by both the backfill sync and the orders webhooks, so it is idempotent.
+model SaleLine {
+  id         String   @id @default(cuid())
+  shop       String
+  lineItemId String
+  orderId    String
+  variantId  String
+  quantity   Int // net of refunds/removals; 0 for cancelled orders
+  orderedAt  DateTime
+
+  @@unique([shop, lineItemId])
+  @@index([shop, variantId, orderedAt])
+}
+
+// End-of-day available inventory per variant, for history charts and
+// for excluding stocked-out days from velocity.
+model InventorySnapshot {
+  id        String @id @default(cuid())
+  shop      String
+  variantId String
+  day       String // YYYY-MM-DD (UTC)
+  available Int
+
+  @@unique([shop, variantId, day])
+}
+
+// The latest forecast for a tracked variant.
+model VariantForecast {
+  id             String    @id @default(cuid())
+  shop           String
+  variantId      String
+  productId      String
+  productTitle   String
+  variantTitle   String
+  sku            String?
+  imageUrl       String?
+  price          Float     @default(0)
+  available      Int
+  unitsSold      Int // within the lookback window
+  velocity       Float // weighted units/day
+  recentVelocity Float
+  trend          Float? // recent vs. previous period, e.g. 0.25 = +25%
+  daysOfCover    Float?
+  stockoutDate   DateTime?
+  reorderPoint   Int
+  reorderByDate  DateTime?
+  suggestedQty   Int
+  status         String // OUT_OF_STOCK | CRITICAL | REORDER | WATCH | HEALTHY | NO_SALES
+  alertedStatus  String?
+  alertedAt      DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([shop, variantId])
+  @@index([shop, status])
+}
+
+// Per-variant overrides of the shop-wide thresholds.
+model VariantSetting {
+  id              String @id @default(cuid())
+  shop            String
+  variantId       String
+  leadTimeDays    Int?
+  safetyStockDays Int?
+
+  @@unique([shop, variantId])
+}
+
+// Every notification the app sent (or attempted).
+model Alert {
+  id        String   @id @default(cuid())
+  shop      String
+  channel   String // EMAIL | SMS
+  recipient String
+  subject   String
+  itemCount Int
+  items     String // JSON summary of the variants included
+  delivered Boolean
+  createdAt DateTime @default(now())
+
+  @@index([shop, createdAt])
+}
