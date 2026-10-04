@@ -10,7 +10,9 @@ current inventory, and alerts the merchant (email/SMS) before it happens.
 
 How it works: `app/lib/forecast.ts` (pure math) · `app/services/forecast.server.ts`
 (sync → forecast → alert) · webhooks for `orders/*` and `inventory_levels/update`
-keep forecasts live between syncs.
+keep forecasts live between syncs. The `orders/*` subscription is commented out in
+`shopify.app.toml` until protected customer data access is granted in the Partner
+Dashboard; until then, orders are picked up by sync and the daily cron.
 
 Optional environment variables:
 
@@ -19,6 +21,20 @@ Optional environment variables:
 | `RESEND_API_KEY`, `EMAIL_FROM` | Email alerts (logged when unset) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | SMS alerts (logged when unset) |
 | `CRON_SECRET` | Enables `POST /jobs/sync` for a daily re-forecast of every shop |
+
+## Screenshots
+
+**Forecast** — KPIs, urgency filters and the variant table
+
+![Forecast page](screenshots/inventory-forecasting-01.png)
+
+**Alerts** — digest history, with a prompt to turn alerts on
+
+![Alerts page](screenshots/inventory-forecasting-02.png)
+
+**Settings** — forecast thresholds, alert level, email/SMS delivery and status guide
+
+![Settings page](screenshots/inventory-forecasting-03.png)
 
 ---
 
